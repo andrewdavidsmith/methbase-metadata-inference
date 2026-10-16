@@ -1,5 +1,13 @@
 # SPDX-License-Identifier: MIT; Copyright 2026 Andrew D Smith
 
+"""
+Hard-coded rules and regex for classifying sample metadata of Methbase
+methylomes according to tissue of origin; designed for human samples.  The
+"tissues" aren't necessarily tissues.
+
+Also includes a mapping of tissues to UBERON terms.
+"""
+
 import re
 
 # (label, regex): ordered, most specific first
