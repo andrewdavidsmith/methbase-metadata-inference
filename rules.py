@@ -56,7 +56,7 @@ rules = [
  ("stem/embryonic cells", r"\bh?escs?\b|hescs?|ipsc|\bips\b|ips cell|sees\d|tslprimed|imelc|\bte\d+|trophectoderm|\bh?ipscs?\b|\bpgp1\b|\begc?s?\b|embryonic germ|\bicm\b|inner cell mass|reprogramming|oogonia|embryonic stem|pluripotent|embryo|blastocyst|\bhues\d|ucla\d|epilc|pgc|primordial germ|germ cell|epiblast|gastrulo|naive|hes\d|hksr|msc|mesenchymal|stem cell|organoid|\bh1\b|\bh9\b"),
  ("gonad",             r"gonad"),
  ("vasculature",       r"endotheli|\bhuvecs?|\bh?ecs?\b|vsmc|smooth muscle|huvec|aorta|carotid|artery|arterial|vein|venous|vascular|umbilical vein"),
- ("tumor (unspecified)", r"xenograft|\bcafs?\b|tumou?r|carcinoma|cancer|neoplas|sarcoma|metasta"),
+ # ("tumor (unspecified)", r"xenograft|\bcafs?\b|tumou?r|carcinoma|cancer|neoplas|sarcoma|metasta"),
 ]
 rules_re = [(l, re.compile(r, re.I)) for l, r in rules]
 
@@ -193,6 +193,13 @@ culture_hint_words = [
 ]
 
 culture_hint_re = re.compile("(" + "|".join(culture_hint_words) + ")", re.I)
+
+cell_line_hint_words = [
+    "cell line",
+    r"\bline\b",
+]
+
+cell_line_hint_re = re.compile("(" + "|".join(cell_line_hint_words) + ")", re.I)
 
 # Stored UBERON mapping (tissue label -> UBERON id, name) Labels that are not
 # anatomical structures (stem cells, tumors, leukemia) do not have a
