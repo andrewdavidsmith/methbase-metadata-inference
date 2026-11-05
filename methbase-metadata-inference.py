@@ -8,7 +8,7 @@ Input:  JSON of the form {"SRX...": {"metadata": {field: value, ...}}, ...}
 Output: <out>/tissue_labels.csv        one row per accession (with uberon info)
         <out>/uberon_mapping.csv       label -> UBERON id/name table with counts
         <out>/labeled.json             same as input with label fields added
-        <out>/review_unresolved.json   accessions where tissue = unknown
+        <out>/review_unresolved.json   accessions where tissue = other
         <out>/<input>_tissue.json      identified tissue names with counts
 Console: summary counts and fields NOT used by the cancer classifier.
 
@@ -91,7 +91,7 @@ def get_tissue_label(metadata):
     Returns a 4-tuple of (label, field used, confidence, evidence)
     """
     if not metadata:
-        return "Unknown", None, "none", ""
+        return "other", None, "none", ""
     for meta in metadata.values():
         if not type(meta) is str:
             raise TypeError("Expected string: " + str(meta))
@@ -117,7 +117,7 @@ def get_tissue_label(metadata):
                 else "low"
             )
             return label, field, confidence, curr_meta
-    return "Unknown", None, "none", ""
+    return "other", None, "none", ""
 
 
 def evidence_from_field(text, allow_control_sample=True):
@@ -495,7 +495,7 @@ def main():
                 cultured_evidence,
             ]
         )
-        if tissue_label == "Unknown" and metadata:
+        if tissue_label == "other" and metadata:
             unresolved[accession] = metadata
 
     write_tissue_labels_csv(args.out, rows, args.assembly)
