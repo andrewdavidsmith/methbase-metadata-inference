@@ -24,35 +24,40 @@ import json
 import os
 import re
 import sys
+import importlib
 
-from rules import (
-    rules_re,
-    evidence_priority,
-    uninformative_re,
-    admin_re,
-    tech_re,
-    control_words,
-    nullish_re,
-    culture_hint_re,
-    cell_line_hint_re,
-    uberon_term_map,
-)
 
-from cancer_rules import (
-    cancer_non_re,
-    cancer_control_re,
-    cancer_strong_re,
-    cancer_growth_re,
-    cancer_benign_re,
-    cancer_weak_re,
-    patient_donor_fields,
-    sample_level_fields,
-    tumor_fields,
-    cancer_lines_re,
-    noncancer_lines_re,
-    cancer_neg_paren_re,
-    cancer_neg_clause_re,
-)
+def parse_args():
+    """
+    Parse the args early so we can get the 'assembly'
+    """
+    ap = argparse.ArgumentParser(
+        description=__doc__,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    ap.add_argument(
+        "infile",
+        help="input JSON file",
+    )
+    ap.add_argument(
+        "--assembly",
+        required=True,
+        help="name of the assembly"
+    )
+    ap.add_argument(
+        "--out",
+        required=True,
+        help="output directory (default: current dir)"
+    )
+    return ap.parse_args()
+
+
+if __name__ == "__main__":
+    args = parse_args()
+
+
+rules = importlib.import_module(".rules", args.assembly)
+cancer_rules = importlib.import_module(".cancer_rules", args.assembly)
 
 
 def count_by_col(rows, col):
@@ -80,7 +85,7 @@ def rules_match(text):
     Match text to rules using 'rules_re' and return a 'label' based on the first
     matched rule or None. Note: rules must remain ordered.
     """
-    for label, rx in rules_re:
+    for label, rx in rules.rules_re:
         if rx.search(text):
             return label
     return None
@@ -96,24 +101,25 @@ def get_tissue_label(metadata):
         if not type(meta) is str:
             raise TypeError("Expected string: " + str(meta))
     # prioritized fields
-    fields = [field for field in evidence_priority if field in metadata] + [
+    fields = [field for field in rules.evidence_priority if field in metadata] + [
         field
         for field in metadata
-        if field not in evidence_priority and not admin_re.search(field)
+        if field not in rules.evidence_priority and not rules.admin_re.search(field)
+        and not rules.exclude_re.search(field)
     ]
     for field in fields:
         curr_meta = metadata[field]
         if curr_meta is None:
             continue
-        if not curr_meta or uninformative_re.match(curr_meta):
+        if not curr_meta or rules.uninformative_re.match(curr_meta):
             continue
         if label := rules_match(curr_meta):
             ## validate positions in evidence priority
             confidence = (
                 "high"
-                if field in evidence_priority[:6]
+                if field in rules.evidence_priority[:6]
                 else "medium"
-                if field in evidence_priority[:14]
+                if field in rules.evidence_priority[:14]
                 else "low"
             )
             return label, field, confidence, curr_meta
@@ -127,23 +133,23 @@ def evidence_from_field(text, allow_control_sample=True):
     classification {non-cancer, cancer, benign/premalignant, control} and the
     second is the matching text that formed the evidence.
     """
-    if not text or nullish_re.match(text):
+    if not text or rules.nullish_re.match(text):
         return None
-    t = cancer_neg_clause_re.sub(
-        "", cancer_neg_paren_re.sub("", tech_re.sub("", text))
+    t = cancer_rules.cancer_neg_clause_re.sub(
+        "", cancer_rules.cancer_neg_paren_re.sub("", rules.tech_re.sub("", text))
     )
-    if cancer_non_re.search(t):
-        return "non-cancer", cancer_non_re.search(t)[0]
-    if cancer_strong_re.search(t):
-        return "cancer", cancer_strong_re.search(t)[0]
-    if cancer_growth_re.search(t):
-        return "benign/premalignant", cancer_growth_re.search(t)[0]
-    if cancer_benign_re.search(t):
+    if cancer_rules.cancer_non_re.search(t):
+        return "non-cancer", cancer_rules.cancer_non_re.search(t)[0]
+    if cancer_rules.cancer_strong_re.search(t):
+        return "cancer", cancer_rules.cancer_strong_re.search(t)[0]
+    if cancer_rules.cancer_growth_re.search(t):
+        return "benign/premalignant", cancer_rules.cancer_growth_re.search(t)[0]
+    if cancer_rules.cancer_benign_re.search(t):
         return "non-cancer", "benign"
-    if cancer_weak_re.search(t):
-        return "cancer", cancer_weak_re.search(t)[0]
-    if allow_control_sample and cancer_control_re.search(t):
-        return "control", cancer_control_re.search(t)[0]
+    if cancer_rules.cancer_weak_re.search(t):
+        return "cancer", cancer_rules.cancer_weak_re.search(t)[0]
+    if allow_control_sample and cancer_rules.cancer_control_re.search(t):
+        return "control", cancer_rules.cancer_control_re.search(t)[0]
     return (None, None)
 
 
@@ -205,8 +211,8 @@ def get_is_cell_line(metadata, blob):
     """
     return bool(
         metadata.get("cell_line")
-        and not nullish_re.match(metadata.get("cell_line"))
-    ) or bool(cell_line_hint_re.match(blob))
+        and not rules.nullish_re.match(metadata.get("cell_line"))
+    ) or bool(rules.cell_line_hint_re.match(blob))
 
 
 def get_is_cultured(metadata, blob, cancer_status):
@@ -215,7 +221,7 @@ def get_is_cultured(metadata, blob, cancer_status):
     """
     if "cell_line" in metadata:
         return "yes", "metadata key: cell_line"
-    if (evidence := culture_hint_re.search(blob)):
+    if (evidence := rules.culture_hint_re.search(blob)):
         return "yes", evidence[0]
     if cancer_status == "cancer cell line":
         return "yes", "cancer status: cancer cell line"
@@ -231,17 +237,18 @@ def cancer_classification(metadata):
 
     blob = get_blob(metadata)
 
-    cancer_line = cancer_lines_re.search(blob)
-    normal_line = noncancer_lines_re.search(blob)
+    cancer_line = cancer_rules.cancer_lines_re.search(blob)
+    normal_line = cancer_rules.noncancer_lines_re.search(blob)
+    # normal cell line here isn't enough for 'is_cell_line' below
     is_cell_line = get_is_cell_line(metadata, blob) or cancer_line
 
     # Tumor-specific fiels (currently all are staging) imply a tumor sample
     tumor_specific_field = next(
         (
             field
-            for field in tumor_fields
+            for field in cancer_rules.tumor_fields
             if field in metadata
-            and not nullish_re.match(metadata[field])
+            and not rules.nullish_re.match(metadata[field])
             and not re.match(r"normal|non", metadata[field], re.I)
         ),
         None,
@@ -249,7 +256,9 @@ def cancer_classification(metadata):
 
     # Sample-level evidence
     sample_level_evidence = get_cancer_evidence(
-        metadata, sample_level_fields, allow_control_sample=not is_cell_line
+        metadata,
+        cancer_rules.sample_level_fields,
+        allow_control_sample=not is_cell_line,
     )
     res = add_cancer_label(sample_level_evidence)
     if not res and tumor_specific_field:
@@ -275,7 +284,7 @@ def cancer_classification(metadata):
 
     # Patient/donor-level evidence
     patient_level_evidence = get_cancer_evidence(
-        metadata, patient_donor_fields, allow_control_sample=True
+        metadata, cancer_rules.patient_donor_fields, allow_control_sample=True
     )
     if res := add_cancer_label(patient_level_evidence):
         classification, evidence = res
@@ -297,7 +306,7 @@ def tissue_to_uberon(tissue_label):
     """
     Get the UBERON info for a given tissue label
     """
-    return uberon_term_map.get(tissue_label, ("", ""))
+    return rules.uberon_term_map.get(tissue_label, ("", ""))
 
 
 def write_tissue_set(rows, outdir, assembly):
@@ -315,14 +324,17 @@ def report_unused_for_cancer(data, output_labels):
     Report fields the cancer classifier never attempts to use
     """
     read = (
-        set(sample_level_fields) | set(patient_donor_fields) | set(tumor_fields)
+        set(cancer_rules.sample_level_fields)
+        | set(cancer_rules.tumor_fields)
+        | set(cancer_rules.patient_donor_fields)
     )
     field_count = collections.Counter(
         field
         for rec in data.values()
         if isinstance(rec, dict)
         for field in rec.get("metadata", {})
-        if field not in read and not admin_re.search(field)
+        if field not in read
+        and not rules.admin_re.search(field)
         and field not in output_labels
     )
     print()
@@ -383,31 +395,15 @@ def main():
     """
     main
     """
-    ap = argparse.ArgumentParser(
-        description=__doc__,
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-    )
-    ap.add_argument(
-        "infile",
-        help="input JSON file",
-    )
-    ap.add_argument(
-        "--assembly",
-        required=True,
-        help="name of the assembly"
-    )
-    ap.add_argument(
-        "--out",
-        required=True,
-        help="output directory (default: current dir)"
-    )
-    args = ap.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
     with open(args.infile, "r", encoding="utf-8") as infile:
         data = json.loads(infile.read())
         if not isinstance(data, dict):
             sys.exit("Expected a JSON object keyed by accession.")
+        if args.assembly not in data:
+            sys.exit(f"Assembly {args.assembly} not found in {args.infile}")
+        data = data[args.assembly]
         data = strip_all(data)
 
     output_labels = (
@@ -439,6 +435,9 @@ def main():
         if not isinstance(rec, dict):
             continue
         metadata = rec.get("metadata", {})
+        if not metadata:
+            rec["metadata"] = {}
+            metadata = {}
         (
             tissue_label,
             tissue_field,
