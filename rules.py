@@ -248,3 +248,7 @@ uberon_term_map = {
     r"vasculature": ("UBERON:0002049", "vasculature"),
     r"stool": ("UBERON:0001988", "feces"),
 }
+
+# exclude these from fields used for inferences on tissue and cancer
+exclude_words = []
+exclude_re = re.compile(r"^(" + "|".join(exclude_words) + r")$", re.I)
