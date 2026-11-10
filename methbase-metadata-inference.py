@@ -56,8 +56,13 @@ if __name__ == "__main__":
     args = parse_args()
 
 
-rules = importlib.import_module(".rules", args.assembly)
-cancer_rules = importlib.import_module(".cancer_rules", args.assembly)
+species_with_rules = ["hg38", "mm39"]
+if args.assembly in species_with_rules:
+    rules = importlib.import_module(".rules", args.assembly)
+    cancer_rules = importlib.import_module(".cancer_rules", args.assembly)
+else:
+    rules = importlib.import_module(".rules", "default")
+    cancer_rules = importlib.import_module(".cancer_rules", "default")
 
 
 def count_by_col(rows, col):
@@ -452,6 +457,11 @@ def main():
         uberon_id, uberon_name = tissue_to_uberon(tissue_label)
         blob = " ".join(metadata.get(field, "") for field in blob_fields)
         is_cultured, cultured_evidence = get_is_cultured(metadata, blob, cancer_status)
+
+        if args.assembly == "mm39":
+            # Get this before updating the rec["metadata"]
+            strain, strain_evidence = rules.get_strain(rec["metadata"])
+
         rec["metadata"] |= {
             "tissue": tissue_label,
             "tissue_confidence": tissue_confidence,
@@ -478,22 +488,33 @@ def main():
             "cultured": is_cultured,
             "cultured_evidence": cultured_evidence,
         }
-        rows.append(
-            [
-                accession,
-                tissue_label,
-                tissue_confidence,
-                tissue_field,
-                tissue_evidence,
-                uberon_id,
-                uberon_name,
-                cancer_status,
-                cancer_confidence,
-                cancer_evidence,
-                is_cultured,
-                cultured_evidence,
-            ]
-        )
+        row = [
+            accession,
+            tissue_label,
+            tissue_confidence,
+            tissue_field,
+            tissue_evidence,
+            uberon_id,
+            uberon_name,
+            cancer_status,
+            cancer_confidence,
+            cancer_evidence,
+            is_cultured,
+            cultured_evidence,
+        ]
+        if args.assembly == "mm39":
+            if strain:
+                rec["metadata"] |= {
+                    "strain": strain,
+                    "strain_evidence": strain_evidence
+                }
+                row.append(strain)
+                row.append(strain_evidence)
+                results[accession] |= {
+                    "strain": strain,
+                    "strain_evidence": strain_evidence,
+                }
+        rows.append(row)
         if tissue_label == "other" and metadata:
             unresolved[accession] = metadata
 
