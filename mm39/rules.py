@@ -349,3 +349,68 @@ exclude_words = [
 ]
 
 exclude_re = re.compile(r"^(" + "|".join(exclude_words) + r")$", re.I)
+
+strain_rules = [
+    ("unannotated", r"(missing|unknown)?"),
+    # ("Cell line", r"(cell|HT22|E14\w*|J1|R1|NJ2008)"),
+    # ("B6D2F1", r"B6D2(F1)?"),
+    ("B6C3F1", r"(B6C3F1(/J)?|C3B6F\d|B6C3\(Cg\))"),
+    ("B6x129 hybrid", r"(V6\.?5|KH2|C57BL6?J?/129|C57BL/6J-129Sv|FVB/129)"),
+    (
+        "F1/mixed", # " (other)",
+        r".*(\bF1\b|hybrid|mixed|offspring|\)\*|\(MAT\)|J\*DBA|"
+        r"C57BL/6xCBA|Spretus|CZECHII|WSB|CB6F1|CastF1|BALB/cfC3H).*|"
+        r"M[BP][SP](x\w+)?",
+    ),
+    ("C3H", r".*(C3H|^C3\.Cg).*"),
+    (
+        "transgenic/KI/KO",
+        r".*(tm\d|Tg\(|cre|GFP|Gfp|mRFP|mCherry|rtTA|Trap2|OG2|"
+        r"Tet1|Pvalb|Dnmt3a|Y\^|ob/ob|Dp\(\d+\)).*",
+    ),
+    ("129", r"129.*"),
+    # ("DBA/2", r"D(BA|AB)/2J?"),
+    ("BALB/c", r"BALB/c"),
+    ("FVB", r"FVB(/NJ?)?"),
+    ("NOD", r"NOD"),
+    ("A/J", r"A/J"),
+    ("NZO", r"NZO.*"),
+    # ("SAM", r"SAM[PR]\d*"),
+    ("CD-1/ICR", r"(CD-?1|ICR)(-ICR)?"),
+    ("CAST", r"CAST/EiJ"),
+    # ("PWK", r"PWK/PHJ"),
+    # ("SPRET", r"SPRET.*"),
+    ("C57BL/6", r"(B6(n_\d)?|C5[67].*|CD57BL6|Bl/?6)"),
+]
+
+strain_rules_re = [
+    (label, re.compile(pattern, re.I)) for label, pattern in strain_rules
+]
+
+include_fields_for_strain = [
+    "strain",
+    "background_strain",
+    "hybrid_strain",
+    "genotype",
+    "genetic_background",
+    "background",
+    "breed",
+    "litter",
+    ## ADS: source_name includes the wrong things too often
+    # "source_name",
+]
+
+def get_strain(metadata: dict) -> str:
+    """
+    Use metadata to identify strain for mouse
+    """
+    for field in include_fields_for_strain:
+        if field not in metadata:
+            continue
+        value = metadata[field]
+        if not isinstance(value, str):
+            continue
+        for label, rx in strain_rules_re:
+            if rx.fullmatch(value):
+                return label, f"{field}: {value}"
+    return "other", ""
